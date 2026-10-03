@@ -576,7 +576,7 @@ public class IttiaApp extends Application {
 
             referenceStage.setResizable(false);
             referenceStage.show();
-        } catch (IOException e) {
+        } catch (IOException | IllegalStateException e) {
             showFatalError("Reference Manager Error", "Failed to open Reference Manager.", e);
         }
     }

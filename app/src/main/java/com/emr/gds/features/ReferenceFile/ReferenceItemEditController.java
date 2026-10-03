@@ -1,6 +1,7 @@
 package com.emr.gds.features.ReferenceFile;
 
 import com.emr.gds.features.ReferenceFile.application.ReferenceItem;
+import com.emr.gds.features.ReferenceFile.application.ReferencePaths;
 import javafx.fxml.FXML;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
@@ -63,14 +64,9 @@ public class ReferenceItemEditController {
     }
 
     public ReferenceItem getReferenceItem() {
-        // Return a new ReferenceItem with updated values, or the modified existing one
-        if (referenceItem == null) {
-            referenceItem = new ReferenceItem(); // For new items
-        }
-        referenceItem.setCategory(categoryField.getText());
-        referenceItem.setContents(contentsField.getText());
-        referenceItem.setDirectoryPath(normalizeDirectoryPath(directoryPathField.getText()));
-        return referenceItem;
+        return new ReferenceItem(referenceItem == null ? 0 : referenceItem.getId(),
+                categoryField.getText(), contentsField.getText(),
+                normalizeDirectoryPath(directoryPathField.getText()));
     }
 
     @FXML
@@ -189,7 +185,7 @@ public class ReferenceItemEditController {
         if (normalized.startsWith("/") || normalized.startsWith("\\") || normalized.matches("^[A-Za-z]:.*")) {
             return false;
         }
-        return true;
+        return basePath != null && ReferencePaths.resolve(basePath.toPath(), normalized).isPresent();
     }
 
     private void showError(String message) {

@@ -6,23 +6,34 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.*;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Locale;
 
 public class SqliteReferenceRepository implements ReferenceRepository {
 
     private static final Logger logger = LoggerFactory.getLogger(SqliteReferenceRepository.class);
     private final AppDatabaseManager dbManager;
-    private static final String DB_FILE_NAME = "references.db";
+    private final Path databasePath;
 
     public SqliteReferenceRepository(AppDatabaseManager dbManager) {
         this.dbManager = dbManager;
+        this.databasePath = null;
+        createTable();
+    }
+
+    /** Opens an isolated database, useful for tests and standalone reference stores. */
+    public SqliteReferenceRepository(Path databasePath) {
+        this.dbManager = null;
+        this.databasePath = databasePath.toAbsolutePath();
         createTable();
     }
 
     private Connection getConnection() throws SQLException {
-        return dbManager.getReferenceConnection();
+        return databasePath == null ? dbManager.getReferenceConnection()
+                : DriverManager.getConnection("jdbc:sqlite:" + databasePath);
     }
 
     private void createTable() {
@@ -41,6 +52,7 @@ public class SqliteReferenceRepository implements ReferenceRepository {
             stmt.execute("CREATE INDEX IF NOT EXISTS idx_references_contents ON \"references\" (contents)");
         } catch (SQLException e) {
             logger.error("Error creating references table: {}", e.getMessage(), e);
+            throw new IllegalStateException("Reference database operation failed.", e);
         }
     }
 
@@ -65,6 +77,9 @@ public class SqliteReferenceRepository implements ReferenceRepository {
             }
 
             int affectedRows = pstmt.executeUpdate();
+            if (affectedRows != 1) {
+                throw new SQLException("Reference was not saved: no matching row.");
+            }
             if (affectedRows > 0 && item.getId() == 0) {
                 try (ResultSet rs = pstmt.getGeneratedKeys()) {
                     if (rs.next()) {
@@ -74,6 +89,7 @@ public class SqliteReferenceRepository implements ReferenceRepository {
             }
         } catch (SQLException e) {
             logger.error("Error saving reference item: {}", e.getMessage(), e);
+            throw new IllegalStateException("Reference database operation failed.", e);
         }
         return item;
     }
@@ -88,9 +104,12 @@ public class SqliteReferenceRepository implements ReferenceRepository {
         try (Connection conn = getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setInt(1, item.getId());
-            pstmt.executeUpdate();
+            if (pstmt.executeUpdate() != 1) {
+                throw new SQLException("Reference was not deleted: no matching row.");
+            }
         } catch (SQLException e) {
             logger.error("Error deleting reference item: {}", e.getMessage(), e);
+            throw new IllegalStateException("Reference database operation failed.", e);
         }
     }
 
@@ -111,6 +130,7 @@ public class SqliteReferenceRepository implements ReferenceRepository {
             }
         } catch (SQLException e) {
             logger.error("Error finding all reference items: {}", e.getMessage(), e);
+            throw new IllegalStateException("Reference database operation failed.", e);
         }
         return items;
     }
@@ -133,6 +153,7 @@ public class SqliteReferenceRepository implements ReferenceRepository {
             }
         } catch (SQLException e) {
             logger.error("Error finding reference item by ID: {}", e.getMessage(), e);
+            throw new IllegalStateException("Reference database operation failed.", e);
         }
         return Optional.empty();
     }
@@ -156,6 +177,7 @@ public class SqliteReferenceRepository implements ReferenceRepository {
             }
         } catch (SQLException e) {
             logger.error("Error finding reference item by category and contents: {}", e.getMessage(), e);
+            throw new IllegalStateException("Reference database operation failed.", e);
         }
         return Optional.empty();
     }
@@ -175,6 +197,7 @@ public class SqliteReferenceRepository implements ReferenceRepository {
             }
         } catch (SQLException e) {
             logger.error("Error checking duplicate references: {}", e.getMessage(), e);
+            throw new IllegalStateException("Reference database operation failed.", e);
         }
         return false;
     }
@@ -194,6 +217,7 @@ public class SqliteReferenceRepository implements ReferenceRepository {
             }
         } catch (SQLException e) {
             logger.error("Error finding distinct categories: {}", e.getMessage(), e);
+            throw new IllegalStateException("Reference database operation failed.", e);
         }
         return categories;
     }
@@ -201,18 +225,18 @@ public class SqliteReferenceRepository implements ReferenceRepository {
     @Override
     public List<ReferenceItem> search(String query, String category) {
         List<ReferenceItem> items = new ArrayList<>();
-        String normalizedQuery = query == null ? "" : query.trim().toLowerCase();
+        String normalizedQuery = query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
         String normalizedCategory = category == null ? "" : category.trim();
         String sql = """
             SELECT id, category, contents, directory_path
             FROM "references"
-            WHERE (? = '' OR LOWER(category) LIKE ? OR LOWER(contents) LIKE ? OR LOWER(directory_path) LIKE ?)
+            WHERE (? = '' OR LOWER(category) LIKE ? ESCAPE '\\' OR LOWER(contents) LIKE ? ESCAPE '\\' OR LOWER(directory_path) LIKE ? ESCAPE '\\')
               AND (? = '' OR category = ?)
             ORDER BY category
             """;
         try (Connection conn = getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            String likeQuery = "%" + normalizedQuery + "%";
+            String likeQuery = "%" + normalizedQuery.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
             pstmt.setString(1, normalizedQuery);
             pstmt.setString(2, likeQuery);
             pstmt.setString(3, likeQuery);
@@ -231,6 +255,7 @@ public class SqliteReferenceRepository implements ReferenceRepository {
             }
         } catch (SQLException e) {
             logger.error("Error searching reference items: {}", e.getMessage(), e);
+            throw new IllegalStateException("Reference database operation failed.", e);
         }
         return items;
     }

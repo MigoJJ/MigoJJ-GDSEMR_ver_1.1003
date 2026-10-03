@@ -87,7 +87,8 @@ class GoutAppIntegrationTest {
         );
 
         assertTrue(summary.contains("총점: 0점"));
-        assertTrue(summary.contains("통풍 아님"));
+        assertTrue(summary.contains("통풍 분류 기준 미충족"));
+        assertTrue(summary.contains("통풍 배제 불가"));
     }
 
 

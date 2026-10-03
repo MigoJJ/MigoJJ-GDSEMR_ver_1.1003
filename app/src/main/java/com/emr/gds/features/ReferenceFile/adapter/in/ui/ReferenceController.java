@@ -1,6 +1,8 @@
 package com.emr.gds.features.ReferenceFile.adapter.in.ui;
 
 import com.emr.gds.features.ReferenceFile.application.ReferenceItem;
+import com.emr.gds.features.ReferenceFile.application.ReferencePaths;
+import com.emr.gds.features.ReferenceFile.application.ReferenceCsv;
 import com.emr.gds.features.ReferenceFile.application.ReferenceService;
 import com.emr.gds.features.ReferenceFile.ReferenceItemEditController;
 import org.slf4j.Logger;
@@ -33,10 +35,10 @@ import javafx.scene.layout.HBox;
 import java.io.IOException;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
-import java.io.FileReader;
-import java.io.FileWriter;
 import java.net.URL;
 import java.nio.file.Files;
+import java.nio.charset.StandardCharsets;
+import java.util.Locale;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
@@ -173,8 +175,7 @@ public class ReferenceController implements Initializable {
         if (!isRelativePath(normalized)) {
             return null;
         }
-        File candidate = new File(currentBaseDir, normalized);
-        return candidate;
+        return ReferencePaths.resolve(currentBaseDir.toPath(), normalized).map(java.nio.file.Path::toFile).orElse(null);
     }
 
 
@@ -237,9 +238,9 @@ public class ReferenceController implements Initializable {
                     setStatus("Added reference: " + newItem.getContents());
                 }
             }
-        } catch (IOException e) {
+        } catch (IOException | IllegalStateException e) {
             logger.error("Error opening reference item edit dialog: {}", e.getMessage(), e);
-            showAlert("Error", "Could not open dialog to add reference item.");
+            showAlert("Error", "Could not add reference: " + e.getMessage());
         }
     }
 
@@ -279,15 +280,16 @@ public class ReferenceController implements Initializable {
                             }
                         }
                         referenceService.saveReference(editedItem);
+                        masterData.set(masterData.indexOf(selectedItem), editedItem);
                         referenceTable.refresh();
                         refreshCategoryFilter();
                         applyFilters();
                         setStatus("Updated reference: " + editedItem.getContents());
                     }
                 }
-            } catch (IOException e) {
+            } catch (IOException | IllegalStateException e) {
                 logger.error("Error opening reference item edit dialog: {}", e.getMessage(), e);
-                showAlert("Error", "Could not open dialog to edit reference item.");
+                showAlert("Error", "Could not edit reference: " + e.getMessage());
             }
         } else {
             showAlert("No Selection", "Please select a reference to edit.");
@@ -304,7 +306,12 @@ public class ReferenceController implements Initializable {
             alert.setContentText("Are you sure you want to delete this reference?");
             Optional<ButtonType> result = alert.showAndWait();
             if (result.isPresent() && result.get() == ButtonType.OK) {
-                referenceService.deleteReference(selectedItem);
+                try {
+                    referenceService.deleteReference(selectedItem);
+                } catch (IllegalStateException e) {
+                    showAlert("Delete Error", e.getMessage());
+                    return;
+                }
                 masterData.remove(selectedItem);
                 refreshCategoryFilter();
                 applyFilters();
@@ -322,9 +329,25 @@ public class ReferenceController implements Initializable {
         File file = fileChooser.showOpenDialog(new Stage());
         if (file != null) {
             logger.info("Selected file for Find: {}", file.getAbsolutePath());
-            showAlert("Find Action", "Searching for content related to: " + file.getName());
-            setStatus("Find requested for: " + file.getName());
+            findReferencesForFile(file);
         }
+    }
+
+    private void findReferencesForFile(File file) {
+        categoryFilter.getSelectionModel().select("All");
+        // Reference rows describe folders; locate references for the selected file's folder.
+        if (basePath != null && file.toPath().toAbsolutePath().normalize()
+                .startsWith(basePath.toPath().toAbsolutePath().normalize())) {
+            String relative = normalizeDirectoryPath(basePath.toPath().toAbsolutePath().normalize()
+                    .relativize(file.toPath().toAbsolutePath().normalize().getParent()).toString());
+            searchField.setText(relative.isEmpty() ? file.getName() : relative);
+        } else {
+            String name = file.getName();
+            int dot = name.lastIndexOf('.');
+            searchField.setText(dot > 0 ? name.substring(0, dot) : name);
+        }
+        applyFilters();
+        setStatus("Found " + filteredData.size() + " references for: " + file.getName());
     }
 
     @FXML
@@ -344,16 +367,14 @@ public class ReferenceController implements Initializable {
             logger.error("ReferenceService is not set.");
             return;
         }
-        masterData.addAll(referenceService.findAllReferences());
-
-        if (masterData.isEmpty()) {
-            masterData.add(new ReferenceItem("Drug Information", "Medication A - side effects, dosage", "drugs/med_a"));
-            masterData.add(new ReferenceItem("Guidelines", "Hypertension management guidelines 2023", "guidelines/hypertension"));
-            masterData.add(new ReferenceItem("Lab Values", "Normal range for Hemoglobin A1c", "labs/hba1c"));
-            masterData.add(new ReferenceItem("Drug Information", "Medication B - interactions", "drugs/med_b"));
+        try {
+            masterData.setAll(referenceService.findAllReferences());
+        } catch (IllegalStateException e) {
+            showAlert("Load Error", e.getMessage());
+            return;
         }
 
-        filteredData.addAll(masterData);
+        filteredData.setAll(masterData);
         referenceTable.setItems(pageData);
         refreshCategoryFilter();
         applyFilters();
@@ -395,7 +416,7 @@ public class ReferenceController implements Initializable {
         }
 
         List<ReferenceItem> importedItems = new ArrayList<>();
-        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+        try (BufferedReader reader = Files.newBufferedReader(file.toPath(), StandardCharsets.UTF_8)) {
             List<String[]> rows = parseCsv(reader);
             if (rows.isEmpty()) {
                 showAlert("Import", "No rows found in CSV.");
@@ -437,11 +458,11 @@ public class ReferenceController implements Initializable {
             return;
         }
 
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
+        try (BufferedWriter writer = Files.newBufferedWriter(file.toPath(), StandardCharsets.UTF_8)) {
             writer.write("Category,Contents,Directory Path");
             writer.newLine();
             for (ReferenceItem item : masterData) {
-                writer.write(toCsvRow(item));
+                writer.write(ReferenceCsv.row(item));
                 writer.newLine();
             }
             setStatus("Exported " + masterData.size() + " references");
@@ -475,7 +496,7 @@ public class ReferenceController implements Initializable {
     }
 
     private void applyFilters() {
-        String query = searchField.getText() == null ? "" : searchField.getText().toLowerCase();
+        String query = searchField.getText() == null ? "" : searchField.getText().trim().toLowerCase(Locale.ROOT);
         String selectedCategory = categoryFilter.getSelectionModel().getSelectedItem();
         if (selectedCategory == null || selectedCategory.isEmpty()) {
             selectedCategory = "All";
@@ -492,9 +513,9 @@ public class ReferenceController implements Initializable {
 
             boolean matchesCategory = "All".equals(selectedCategory) || category.equals(selectedCategory);
             boolean matchesQuery = query.isEmpty() ||
-                category.toLowerCase().contains(query) ||
-                contents.toLowerCase().contains(query) ||
-                directoryPath.toLowerCase().contains(query);
+                category.toLowerCase(Locale.ROOT).contains(query) ||
+                contents.toLowerCase(Locale.ROOT).contains(query) ||
+                directoryPath.toLowerCase(Locale.ROOT).contains(query);
 
             if (matchesCategory && matchesQuery) {
                 filteredData.add(item);
@@ -563,12 +584,11 @@ public class ReferenceController implements Initializable {
                 categories.add(category);
             }
         }
+        String selectedCategory = categoryFilter.getValue();
         categoryFilter.getItems().clear();
         categoryFilter.getItems().add("All");
         categoryFilter.getItems().addAll(categories);
-        if (categoryFilter.getSelectionModel().getSelectedItem() == null) {
-            categoryFilter.getSelectionModel().select("All");
-        }
+        categoryFilter.getSelectionModel().select(categories.contains(selectedCategory) ? selectedCategory : "All");
     }
 
     private void setStatus(String message) {
@@ -602,7 +622,7 @@ public class ReferenceController implements Initializable {
         if (normalized.startsWith("/") || normalized.startsWith("\\") || normalized.matches("^[A-Za-z]:.*")) {
             return false;
         }
-        return true;
+        return basePath != null && ReferencePaths.resolve(basePath.toPath(), normalized).isPresent();
     }
 
     private String normalizeDirectoryPath(String directoryPath) {
@@ -615,36 +635,7 @@ public class ReferenceController implements Initializable {
     }
 
     private List<String[]> parseCsv(BufferedReader reader) throws IOException {
-        List<String[]> rows = new ArrayList<>();
-        String line;
-        while ((line = reader.readLine()) != null) {
-            rows.add(parseCsvLine(line));
-        }
-        return rows;
-    }
-
-    private String[] parseCsvLine(String line) {
-        List<String> fields = new ArrayList<>();
-        StringBuilder current = new StringBuilder();
-        boolean inQuotes = false;
-        for (int i = 0; i < line.length(); i++) {
-            char c = line.charAt(i);
-            if (c == '"' ) {
-                if (inQuotes && i + 1 < line.length() && line.charAt(i + 1) == '"') {
-                    current.append('"');
-                    i++;
-                } else {
-                    inQuotes = !inQuotes;
-                }
-            } else if (c == ',' && !inQuotes) {
-                fields.add(current.toString());
-                current.setLength(0);
-            } else {
-                current.append(c);
-            }
-        }
-        fields.add(current.toString());
-        return fields.toArray(new String[0]);
+        return ReferenceCsv.read(reader);
     }
 
     private boolean isHeaderRow(String[] row) {
@@ -654,20 +645,6 @@ public class ReferenceController implements Initializable {
         String c0 = row[0].toLowerCase();
         String c1 = row[1].toLowerCase();
         return c0.contains("category") && c1.contains("contents");
-    }
-
-    private String toCsvRow(ReferenceItem item) {
-        return csvEscape(item.getCategory()) + "," + csvEscape(item.getContents()) + "," + csvEscape(item.getDirectoryPath());
-    }
-
-    private String csvEscape(String value) {
-        String v = value == null ? "" : value;
-        boolean needsQuote = v.contains(",") || v.contains("\"") || v.contains("\n") || v.contains("\r");
-        v = v.replace("\"", "\"\"");
-        if (needsQuote) {
-            return "\"" + v + "\"";
-        }
-        return v;
     }
 
     private void showImportPreviewDialog(List<ReferenceItem> importedItems) {
@@ -698,16 +675,30 @@ public class ReferenceController implements Initializable {
         dialogStage.setScene(new Scene(root));
 
         skipButton.setOnAction(e -> {
-            importItems(importedItems, false);
+            runImport(importedItems, false);
             dialogStage.close();
         });
         overwriteButton.setOnAction(e -> {
-            importItems(importedItems, true);
+            runImport(importedItems, true);
             dialogStage.close();
         });
         cancelButton.setOnAction(e -> dialogStage.close());
 
         dialogStage.showAndWait();
+    }
+
+    private void runImport(List<ReferenceItem> items, boolean overwriteExisting) {
+        try {
+            importItems(items, overwriteExisting);
+        } catch (IllegalStateException e) {
+            setStatus("Import stopped because of a database error. Earlier rows may have been saved.");
+            showAlert("Import Error", e.getMessage());
+            try {
+                reloadDataFromDb();
+            } catch (IllegalStateException loadError) {
+                logger.error("Could not reload references after import failure", loadError);
+            }
+        }
     }
 
     private void importItems(List<ReferenceItem> items, boolean overwriteExisting) {

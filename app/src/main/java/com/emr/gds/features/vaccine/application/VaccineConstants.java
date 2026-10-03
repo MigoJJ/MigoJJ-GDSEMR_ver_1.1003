@@ -6,11 +6,13 @@ public final class VaccineConstants {
 
     public static final String[] UI_ELEMENTS = {
             "### Respiratory Vaccines",
-            "Sanofi's Vaxigrip® Vaccine(H3N2)",
-            "GC Flu Plus (H1N1, H3N2, Victoria lineage)® vaccine [NIP]",
             "Prevena 20 (pneumococcal vaccine (PCV20))",
-            "Prevena 13 (pneumococcal vaccine (PCV13))",
             "COVID-19 vaccine (mRNA, viral vector, or protein subunit)",
+            "[무료독감 NIP] 지씨플루 백신 / GC Flu Vaccine / GC녹십자",
+            "[유료독감 유독] 지씨플루 백신 / GC Flu Vaccine / GC녹십자",
+            "[유료독감] 플루셀박스 / Flucelvax (Se-qirus)",
+            "[유료독감] 플루아드 / Fluad (Se-qirus / Novartis)",
+            "캡박시브(Capvaxive) pneumococcal vaccine PCV21",
 
             "### Travel / Endemic Disease Vaccines",
             "MMR (Measles, Mumps, Rubella)",
