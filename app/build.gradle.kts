@@ -6,6 +6,7 @@ plugins {
 val javafxVersion = project.property("javafxVersion") as String
 val sqliteVersion = project.property("sqliteVersion") as String
 val slf4jVersion = project.property("slf4jVersion") as String
+val appMaxHeap = providers.gradleProperty("appMaxHeap").getOrElse("1024m")
 
 dependencies {
     implementation("org.xerial:sqlite-jdbc:$sqliteVersion")
@@ -31,5 +32,8 @@ javafx {
 
 application {
     mainClass.set("com.emr.gds.IttiaApp")
-    applicationDefaultJvmArgs = listOf("--enable-native-access=javafx.graphics", "--enable-native-access=ALL-UNNAMED")
+    applicationDefaultJvmArgs = listOf(
+        "-Xms64m", "-Xmx$appMaxHeap",
+        "--enable-native-access=javafx.graphics", "--enable-native-access=ALL-UNNAMED"
+    )
 }
