@@ -15,8 +15,11 @@ import javafx.scene.control.TextField;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.stage.Stage;
 
+import java.text.Collator;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.function.Consumer;
 
@@ -52,6 +55,9 @@ public class TemplateEditController {
         }
 
         nameColumn.setCellValueFactory(new PropertyValueFactory<>("name"));
+        Collator nameCollator = Collator.getInstance(Locale.KOREAN);
+        nameCollator.setStrength(Collator.SECONDARY);
+        nameColumn.setComparator(Comparator.nullsFirst(nameCollator::compare));
 
         templateTable.getSelectionModel().selectedItemProperty().addListener((obs, oldVal, newVal) -> {
             if (newVal != null) {
@@ -65,6 +71,9 @@ public class TemplateEditController {
         List<TemplateModel> templates = repository.getAllTemplates();
         ObservableList<TemplateModel> data = FXCollections.observableArrayList(templates);
         templateTable.setItems(data);
+        nameColumn.setSortType(TableColumn.SortType.ASCENDING);
+        templateTable.getSortOrder().setAll(nameColumn);
+        templateTable.sort();
     }
 
     private void selectTemplate(TemplateModel template) {
