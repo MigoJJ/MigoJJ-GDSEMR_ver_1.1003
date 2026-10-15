@@ -40,12 +40,12 @@ public class Glp1SemaglutidePane extends VBox {
     private final Label lblValidation = new Label();
 
     public Glp1SemaglutidePane() {
-        setSpacing(10);
-        setPadding(new Insets(12));
+        setSpacing(8);
+        setPadding(new Insets(10));
         getStyleClass().add("glp1-semaglutide-pane");
 
         Label lblHeader = new Label("MEDICATION - GLP-1RA (SEMAGLUTIDE)");
-        lblHeader.setStyle("-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: #1a1a1a;");
+        lblHeader.setStyle("-fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: #1a1a1a;");
 
         TitledPane paneChecklist = createChecklistPane();
         TitledPane paneDose      = createDosePane();
@@ -57,7 +57,7 @@ public class Glp1SemaglutidePane extends VBox {
 
         setupEventListeners();
 
-        VBox content = new VBox(12, lblHeader, paneChecklist, paneDose, paneFollowUp, paneContra, lblValidation);
+        VBox content = new VBox(8, lblHeader, paneChecklist, paneDose, paneFollowUp, paneContra, lblValidation);
         ScrollPane scrollPane = new ScrollPane(content);
         scrollPane.setFitToWidth(true);
         scrollPane.setStyle("-fx-padding: 0;");

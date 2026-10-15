@@ -1,0 +1,19 @@
+.glp1-window {
+    -fx-font-family: "System";
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-font-style: italic;
+}
+
+.glp1-window .button {
+    -fx-font-size: 11px;
+    -fx-padding: 4 8;
+}
+
+.glp1-window .titled-pane > .title {
+    -fx-padding: 4 8;
+}
+
+.glp1-window .text-field {
+    -fx-padding: 3 6;
+}
